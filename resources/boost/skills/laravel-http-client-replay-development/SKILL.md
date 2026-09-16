@@ -52,14 +52,22 @@ $activities = $client->getActivities();
 // Or scoped execution
 $result = HttpClientReplay::record(fn () => $client->fetch());
 $cached = HttpClientReplay::replay(fn () => $client->fetch());
+
+// Auto-expiring cassette (mirrors Cache::remember)
+$activities = HttpClientReplay::remember('strava/activities', now()->addHours(2), function () use ($client) {
+    return $client->getActivities();
+});
 ```
 
 ### 3. URL Scoping & Filtering
 
-Limit interception to specific third-party APIs:
+Limit interception to specific third-party APIs and optionally define per-scope TTLs:
 
 ```php
-HttpClientReplay::scope(['https://www.strava.com/*', '*.stripe.com/*']);
+HttpClientReplay::scope([
+    'https://www.strava.com/*' => ['ttl' => 3600],
+    '*.stripe.com/*',
+]);
 HttpClientReplay::ignore(['127.0.0.1*', 'localhost*']);
 ```
 
@@ -69,6 +77,7 @@ Manage cassettes via Artisan:
 
 ```bash
 php artisan http-client-replay:list
+php artisan http-client-replay:clear --expired
 php artisan http-client-replay:clear --domain=strava
 php artisan http-client-replay:clear --all --force
 ```

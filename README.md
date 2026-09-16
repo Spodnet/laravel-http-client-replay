@@ -219,17 +219,80 @@ Configure what to redact in `config/http-client-replay.php`:
 
 ---
 
+## Auto-Expiring Cassettes (TTL)
+
+Cassettes can be configured to automatically expire after a set duration. When an expired cassette is accessed:
+- In **`auto`** mode: The stale cassette is removed and the request executes live to fetch and record fresh data.
+- In **`replay`** mode: A `CassetteExpiredException` is thrown to ensure strict offline test reproducibility.
+
+TTL values mirror Laravel Cache and accept integer seconds, `\DateTimeInterface` (e.g. `now()->addHours(2)`), `\DateInterval`, or `\Carbon\CarbonInterval`.
+
+### 1. Using `remember()` (Mirroring `Cache::remember()`)
+
+```php
+use Spodnet\HttpClientReplay\Facades\HttpClientReplay;
+
+// Fetch and cache response for 1 hour; refreshes live when expired
+$response = HttpClientReplay::remember('strava/activities', 3600, function () {
+    return Http::get('https://www.strava.com/api/v3/athlete/activities');
+});
+
+// Or pass DateTimeInterface
+HttpClientReplay::remember('stripe/rates', now()->addDay(), function () {
+    return Http::get('https://api.stripe.com/v1/exchange_rates');
+});
+
+// Cache indefinitely
+HttpClientReplay::rememberForever('github/org', function () {
+    return Http::get('https://api.github.com/orgs/laravel');
+});
+```
+
+### 2. Request-Level Expiration via Laravel HTTP Client Options
+
+```php
+use Illuminate\Support\Facades\Http;
+
+// Specify TTL directly on outbound requests:
+$response = Http::withOptions(['replay_ttl' => 3600])
+    ->get('https://api.example.com/data');
+
+// Or via header:
+$response = Http::withHeaders(['X-Replay-TTL' => 3600])
+    ->get('https://api.example.com/data');
+```
+
+### 3. Fluent Runtime Modifiers & Touching Cassettes
+
+```php
+// Apply TTL to next request or active cassette
+HttpClientReplay::ttl(now()->addMinutes(30))->useCassette('rates', function () {
+    Http::get('https://api.example.com/rates');
+});
+
+// Mark next cassette to never expire
+HttpClientReplay::forever()->useCassette('static-geo-data');
+
+// Extend/refresh timestamp of an existing stored cassette
+HttpClientReplay::touch('strava/activities', now()->addDay());
+```
+
+---
+
 ## Domain & URL Scoping
 
 To avoid intercepting unrelated outbound requests (like internal microservices, AWS S3, or third-party webhooks), scope which URLs to handle:
 
 ### In Configuration (`config/http-client-replay.php`)
 
+Scopes can be defined as simple strings or keyed with scope options like `ttl`:
+
 ```php
 // Only record / replay requests matching these patterns
 'scopes' => [
-    'https://www.strava.com/*',
-    '*.stripe.com/*',
+    'https://www.strava.com/*' => ['ttl' => 3600], // 1 hour TTL for Strava
+    '*.stripe.com/*' => ['ttl' => 86400],           // 24 hour TTL for Stripe
+    'https://api.github.com/*',                     // falls back to driver/global TTL
 ],
 
 // Always pass through untouched
@@ -242,7 +305,7 @@ To avoid intercepting unrelated outbound requests (like internal microservices, 
 ### At Runtime
 
 ```php
-HttpClientReplay::scope(['https://api.github.com/*']);
+HttpClientReplay::scope('https://www.strava.com/*', ['ttl' => 3600]);
 HttpClientReplay::ignore(['localhost*']);
 ```
 
@@ -304,6 +367,9 @@ Delete all cassettes or filter by domain:
 ```bash
 # Clear all cassettes (with confirmation prompt)
 php artisan http-client-replay:clear --all
+
+# Clear only expired cassettes
+php artisan http-client-replay:clear --expired
 
 # Clear only cassettes for a specific domain
 php artisan http-client-replay:clear --domain=strava.com

@@ -21,6 +21,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Default Cassette Expiration (TTL)
+    |--------------------------------------------------------------------------
+    |
+    | Defines the default duration (in seconds) a cassette remains valid.
+    | When set to null, cassettes never expire unless configured on a per-driver,
+    | per-scope, or per-request basis.
+    |
+    */
+
+    'ttl' => env('HTTP_CLIENT_REPLAY_TTL', null),
+
+    /*
+    |--------------------------------------------------------------------------
     | Storage Driver
     |--------------------------------------------------------------------------
     |
@@ -35,30 +48,36 @@ return [
 
         'file' => [
             'path' => env('HTTP_CLIENT_REPLAY_PATH', storage_path('http-client-replay/cassettes')),
+            'ttl' => env('HTTP_CLIENT_REPLAY_FILE_TTL', null),
         ],
 
         'disk' => [
             'disk' => env('HTTP_CLIENT_REPLAY_DISK', 'local'),
             'path' => env('HTTP_CLIENT_REPLAY_DISK_PATH', 'http-client-replay/cassettes'),
+            'ttl' => env('HTTP_CLIENT_REPLAY_DISK_TTL', null),
         ],
 
         'database' => [
             'connection' => env('HTTP_CLIENT_REPLAY_DB_CONNECTION'),
             'table' => env('HTTP_CLIENT_REPLAY_DB_TABLE', 'http_client_replay_cassettes'),
+            'ttl' => env('HTTP_CLIENT_REPLAY_DB_TTL', null),
         ],
 
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | Scoped URL Patterns
+    | Scoped URL Patterns & Options
     |--------------------------------------------------------------------------
     |
     | If populated, only outbound requests matching one of these URL patterns
     | or regexes will be intercepted for recording or replaying.
     | When empty, all requests are handled.
     |
-    | Example: ['https://www.strava.com/*', '*.stripe.com/*']
+    | Patterns can be defined as simple strings or keyed with scope options:
+    | Examples:
+    |   ['https://api.github.com/*']
+    |   ['https://www.strava.com/*' => ['ttl' => 3600]]
     |
     */
 
